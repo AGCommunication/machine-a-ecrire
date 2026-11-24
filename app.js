@@ -8,7 +8,9 @@ const railMark = $('#rail-marker'), stamp = $('#stamp');
 const panel = $('#panel'), scrim = $('#scrim'), list = $('#sheet-list');
 
 const LS_KEY = 'ag.machine.v1';
-const STRIKE = () => window.innerHeight * 0.70; // ligne de frappe
+// ligne de frappe — sur la hauteur visible (clavier virtuel ouvert compris)
+const VH = () => (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+const STRIKE = () => VH() * 0.70;
 
 /* ——— état ——— */
 
@@ -454,6 +456,9 @@ function measure() {
 }
 
 window.addEventListener('resize', () => { measure(); render(); anchor(false); });
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => { render(); anchor(false); });
+}
 window.addEventListener('beforeunload', flush);
 document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
 
