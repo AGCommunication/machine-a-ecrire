@@ -2,15 +2,21 @@
 'use strict';
 
 const $ = s => document.querySelector(s);
-const stage = $('#stage'), mover = $('#mover'), paper = $('#paper'), zone = $('#zone');
-const ta = $('#ta'), mirror = $('#mirror'), caretEl = $('#caret');
+const stage = $('#stage'), mover = $('#mover'), doc = $('#doc'), meas = $('#meas');
+const ta = $('#ta'), caretEl = $('#caret');
 const railMark = $('#rail-marker'), stamp = $('#stamp');
 const panel = $('#panel'), scrim = $('#scrim'), list = $('#sheet-list');
+const printRoot = $('#print-root');
 
 const LS_KEY = 'ag.machine.v1';
-// ligne de frappe — sur la hauteur visible (clavier virtuel ouvert compris)
+const LINES_PER_PAGE = 21;
+
+/* géométrie A4, à l'échelle k de l'écran (680 px ↔ 210 mm) */
+let K = 1, LH = 38, PAD_TOP = 82, PAD_LEFT = 84, PAD_RIGHT = 64, SHEET_W = 680,
+    SHEET_H = 962, GAP = 42, TEXT_W = 532;
+
 const VH = () => (window.visualViewport ? window.visualViewport.height : window.innerHeight);
-const STRIKE = () => VH() * 0.70;
+const STRIKE = () => VH() * 0.70; // ligne de frappe
 
 /* ——— état ——— */
 
@@ -38,13 +44,13 @@ function loadStore() {
 const store = loadStore();
 let cur = store.projects.find(p => p.id === store.currentId) || store.projects[0];
 
-let ty = 0;                 // translation verticale de la feuille
-let padTop = 0, padRight = 0;
-let mouseDown = false;
-let belled = false;         // sonnette déjà tintée sur cette ligne
+let ty = 0;
+let pages = [];            // [{start, end, el, textEl}]
+let lastPaginatedText = null;
+let belled = false;
 let justTyped = false;
 let saveTimer = null;
-let spanBefore = null, spanRest = null;
+let caretViewport = null;  // dernier rect du caret (coordonnées écran)
 
 function persist() { try { localStorage.setItem(LS_KEY, JSON.stringify(store)); } catch (e) {} }
 function flush() { cur.text = ta.value; cur.updatedAt = Date.now(); persist(); }
@@ -54,55 +60,137 @@ function scheduleSave() {
   saveTimer = setTimeout(persist, 400);
 }
 
-/* ——— rendu du miroir (l'encre) ———
-   Le textarea est transparent et reçoit toute l'édition native ;
-   le miroir affiche le même texte, scindé au niveau du curseur pour
-   pouvoir mesurer sa position exacte (technique « textarea-caret »). */
+/* ——— pagination ———
+   Le texte est mesuré dans #meas (mêmes métriques, même largeur) ;
+   chaque feuille A4 reçoit la tranche de texte de ses 21 lignes. */
 
-function caretIndex() {
-  return ta.selectionDirection === 'backward' ? ta.selectionStart : ta.selectionEnd;
+function measureGeometry() {
+  SHEET_W = Math.min(680, Math.floor(window.innerWidth * 0.94));
+  K = SHEET_W / 680;
+  LH = 38 * K; PAD_TOP = 82 * K; PAD_LEFT = 84 * K; PAD_RIGHT = 64 * K;
+  SHEET_H = 962 * K; GAP = Math.round(42 * K);
+  TEXT_W = SHEET_W - PAD_LEFT - PAD_RIGHT;
+  const r = document.documentElement.style;
+  r.setProperty('--sheet-w', SHEET_W + 'px');
+  r.setProperty('--sheet-h', SHEET_H + 'px');
+  r.setProperty('--pad-top', PAD_TOP + 'px');
+  r.setProperty('--pad-bottom', PAD_TOP + 'px');
+  r.setProperty('--pad-left', PAD_LEFT + 'px');
+  r.setProperty('--pad-right', PAD_RIGHT + 'px');
+  r.setProperty('--fs', (20 * K) + 'px');
+  r.setProperty('--lh', LH + 'px');
+  r.setProperty('--gap', GAP + 'px');
 }
+
+function paginate(text) {
+  meas.textContent = text + '​';
+  const tn = meas.firstChild;
+  const total = text.length;
+  const measTop = meas.getBoundingClientRect().top;
+  const range = document.createRange();
+
+  function lineOf(i) { // n° de ligne visuelle du caractère i (sentinelle comprise)
+    range.setStart(tn, i);
+    range.setEnd(tn, Math.min(i + 1, total + 1));
+    const r = range.getClientRects()[0] || range.getBoundingClientRect();
+    return Math.round((r.top - measTop) / LH);
+  }
+
+  const totalLines = lineOf(total) + 1;
+  const nPages = Math.max(1, Math.ceil(totalLines / LINES_PER_PAGE));
+  const bounds = [0];
+  for (let p = 1; p < nPages; p++) {
+    const target = p * LINES_PER_PAGE;
+    let lo = bounds[p - 1], hi = total; // plus petit i tel que lineOf(i) >= target
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (lineOf(mid) >= target) hi = mid; else lo = mid + 1;
+    }
+    bounds.push(lo);
+  }
+  bounds.push(total);
+  return bounds;
+}
+
+function syncPages(text) {
+  const bounds = paginate(text);
+  const n = bounds.length - 1;
+  while (pages.length > n) { pages.pop().el.remove(); }
+  while (pages.length < n) {
+    const el = document.createElement('div');
+    el.className = 'sheet';
+    const textEl = document.createElement('div');
+    textEl.className = 'ptext sheet-text';
+    textEl.dataset.page = pages.length;
+    el.appendChild(textEl);
+    doc.appendChild(el);
+    pages.push({ start: 0, end: 0, el, textEl });
+  }
+  for (let i = 0; i < n; i++) { pages[i].start = bounds[i]; pages[i].end = bounds[i + 1]; }
+}
+
+/* ——— rendu : tranches, sélection, caret ——— */
+
+let focusSpan = null; // le span qui commence à l'index du caret (son 1er rect = position du caret)
 
 function render() {
   const text = ta.value;
-  const i = caretIndex();
-  spanBefore = document.createElement('span');
-  spanBefore.textContent = text.slice(0, i);
-  spanRest = document.createElement('span');
-  spanRest.textContent = text.slice(i) + '​';
-  mirror.replaceChildren(spanBefore, spanRest);
-  // garde-fous : le navigateur peut scroller en douce un overflow:hidden
-  // pour « montrer » le caret natif (pourtant invisible)
-  if (ta.scrollTop) ta.scrollTop = 0;
-  if (stage.scrollTop || stage.scrollLeft) { stage.scrollTop = 0; stage.scrollLeft = 0; }
-  const se = document.scrollingElement;
-  if (se && (se.scrollTop || se.scrollLeft)) { se.scrollTop = 0; se.scrollLeft = 0; }
+  if (text !== lastPaginatedText) {
+    syncPages(text);
+    lastPaginatedText = text;
+  }
+  const s = ta.selectionStart, e = ta.selectionEnd;
+  const f = ta.selectionDirection === 'backward' ? s : e;
+  focusSpan = null;
+
+  for (let i = 0; i < pages.length; i++) {
+    const pg = pages[i];
+    const frag = document.createDocumentFragment();
+    const last = i === pages.length - 1;
+    // segments découpés à s et e (le segment commençant à f sert de repère caret)
+    const cuts = [pg.start, Math.min(Math.max(s, pg.start), pg.end),
+                  Math.min(Math.max(e, pg.start), pg.end), pg.end];
+    const focusInPage = f >= pg.start && (f < pg.end || (last && f === pg.end));
+    for (let c = 0; c < 3; c++) {
+      const a = cuts[c], b = cuts[c + 1];
+      const isFocusHere = focusInPage && a === f;
+      if (a >= b && !isFocusHere && !(last && c === 2)) continue;
+      const span = document.createElement('span');
+      if (c === 1 && b > a) span.className = 'sel';
+      span.textContent = text.slice(a, b) + ((last && c === 2) ? '​' : '');
+      frag.appendChild(span);
+      // le dernier span ouvert à l'index f a toujours un rect mesurable
+      if (isFocusHere) focusSpan = span;
+    }
+    pg.textEl.replaceChildren(frag);
+  }
   positionCaret();
 }
 
 function caretRect() {
-  const r = spanRest && spanRest.getClientRects()[0];
-  return r || null;
+  if (!focusSpan) return null;
+  return focusSpan.getClientRects()[0] || null;
 }
 
 function positionCaret() {
   const r = caretRect();
+  caretViewport = r;
   if (!r) { caretEl.style.display = 'none'; return; }
-  const zr = zone.getBoundingClientRect();
-  const focused = document.activeElement === ta;
+  const dr = doc.getBoundingClientRect();
   const hasSel = ta.selectionStart !== ta.selectionEnd;
-  caretEl.style.display = (focused && !hasSel) ? 'block' : 'none';
-  caretEl.style.left = (r.left - zr.left) + 'px';
-  caretEl.style.top = (r.top - zr.top + r.height * 0.18) + 'px';
+  caretEl.style.display = hasSel ? 'none' : 'block';
+  caretEl.style.left = (r.left - dr.left) + 'px';
+  caretEl.style.top = (r.top - dr.top + r.height * 0.18) + 'px';
   caretEl.style.height = (r.height * 0.62) + 'px';
   railMark.style.transform = 'translateX(' + (r.left - 4.5) + 'px)';
 
-  // la sonnette, à l'approche de la marge droite
   if (justTyped && store.sounds.carriage) {
-    const pr = paper.getBoundingClientRect();
-    const distRight = (pr.right - padRight) - r.left;
-    if (distRight < 85) { if (!belled) { belled = true; S.bell(); } }
-    else if (distRight > 170) belled = false;
+    const pg = pages.find(p => p.textEl.contains(focusSpan));
+    if (pg) {
+      const distRight = pg.textEl.getBoundingClientRect().right - r.left;
+      if (distRight < 85 * K) { if (!belled) { belled = true; S.bell(); } }
+      else if (distRight > 170 * K) belled = false;
+    }
   }
   justTyped = false;
 }
@@ -111,10 +199,16 @@ function positionCaret() {
 
 function setTy(v, smooth) {
   const strike = STRIKE();
-  const minTy = strike - (padTop + mirror.offsetHeight);
-  const maxTy = strike - padTop;
-  ty = Math.min(maxTy, Math.max(minTy, v));
-  mover.style.transition = smooth ? 'transform 120ms cubic-bezier(.25,.6,.3,1)' : 'none';
+  const docH = doc.offsetHeight;
+  const nv = Math.min(strike, Math.max(strike - docH, v));
+  if (smooth) {
+    // un saut de page voyage un peu plus longtemps qu'un simple interligne
+    const d = Math.min(300, 90 + Math.abs(nv - ty) * 0.3);
+    mover.style.transition = 'transform ' + d + 'ms cubic-bezier(.25,.6,.3,1)';
+  } else {
+    mover.style.transition = 'none';
+  }
+  ty = nv;
   mover.style.transform = 'translate3d(0,' + ty + 'px,0)';
 }
 
@@ -127,102 +221,86 @@ function anchor(smooth) {
   setTy(target, smooth);
 }
 
-/* ——— sons, synthétisés (aucun fichier) ——— */
+/* ——— sons : enregistrements réels d'une machine à écrire ———
+   (projet daktilo, licence MIT/Apache-2.0 — fichiers dans sounds/) */
 
 const S = (() => {
-  let ctx = null, master = null, noise = null;
+  const FILES = {
+    key: 'sounds/key.wav',       // frappe d'une touche
+    keyup: 'sounds/keyup.wav',   // relâchement
+    stroke: 'sounds/stroke.wav', // frappe sèche (espace, effacement)
+    cr: 'sounds/retour.wav',     // retour chariot
+    bell: 'sounds/sonnette.wav', // sonnette de marge
+  };
+  const GAIN = { key: .9, keyup: .22, stroke: .55, cr: .8, bell: .5 };
+  let ctx = null, master = null;
+  const raw = {}, buffers = {}, audioEls = {};
 
+  // les octets sont chargés tout de suite ; décodés au premier geste.
+  // en file:// (fetch interdit), des éléments <audio> prennent le relais.
+  const viaAudioEl = location.protocol === 'file:';
+  for (const n in FILES) {
+    if (viaAudioEl) {
+      const a = new Audio(FILES[n]);
+      a.preload = 'auto';
+      audioEls[n] = a;
+      continue;
+    }
+    fetch(FILES[n]).then(r => r.ok ? r.arrayBuffer() : Promise.reject())
+      .then(b => { raw[n] = b; decode(n); })
+      .catch(() => {
+        const a = new Audio(FILES[n]);
+        a.preload = 'auto';
+        audioEls[n] = a;
+      });
+  }
+  function decode(n) {
+    if (!ctx || !raw[n] || buffers[n]) return;
+    ctx.decodeAudioData(raw[n].slice(0)).then(b => { buffers[n] = b; }).catch(() => {});
+  }
   function ensure() {
     if (!ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return false;
       ctx = new AC();
       master = ctx.createGain();
-      master.gain.value = 0.85;
+      master.gain.value = 0.9;
       master.connect(ctx.destination);
-      const len = Math.floor(ctx.sampleRate * 0.25);
-      noise = ctx.createBuffer(1, len, ctx.sampleRate);
-      const d = noise.getChannelData(0);
-      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      for (const n in FILES) decode(n);
     }
     if (ctx.state === 'suspended') ctx.resume();
     return true;
   }
-
-  // claquement : souffle filtré + petit choc sourd
-  function thock(freq, dur, vol, thump) {
-    if (!ensure()) return;
-    const t = ctx.currentTime;
-    const src = ctx.createBufferSource();
-    src.buffer = noise;
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = freq * (0.85 + Math.random() * 0.3);
-    bp.Q.value = 1.1;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(vol * (0.8 + Math.random() * 0.4), t);
-    g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
-    src.connect(bp); bp.connect(g); g.connect(master);
-    src.start(t); src.stop(t + dur);
-
-    const o = ctx.createOscillator();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(105 + Math.random() * 35, t);
-    o.frequency.exponentialRampToValueAtTime(52, t + 0.045);
-    const g2 = ctx.createGain();
-    g2.gain.setValueAtTime(vol * thump, t);
-    g2.gain.exponentialRampToValueAtTime(0.0008, t + 0.055);
-    o.connect(g2); g2.connect(master);
-    o.start(t); o.stop(t + 0.06);
-  }
-
-  function bell() {
-    if (!ensure()) return;
-    const t = ctx.currentTime;
-    [[2093, 0.10], [2794, 0.045]].forEach(([f, v]) => {
-      const o = ctx.createOscillator();
-      o.type = 'sine';
-      o.frequency.value = f * (0.995 + Math.random() * 0.01);
+  function play(n, rate, gain) {
+    if (ensure() && buffers[n]) {
+      const src = ctx.createBufferSource();
+      src.buffer = buffers[n];
+      src.playbackRate.value = rate;
       const g = ctx.createGain();
-      g.gain.setValueAtTime(v, t);
-      g.gain.exponentialRampToValueAtTime(0.0005, t + 1.1);
-      o.connect(g); g.connect(master);
-      o.start(t); o.stop(t + 1.15);
-    });
-    thock(4200, 0.02, 0.05, 0.0); // l'impact du marteau sur le timbre
+      g.gain.value = GAIN[n] * gain;
+      src.connect(g); g.connect(master);
+      src.start();
+    } else if (audioEls[n]) {
+      const a = audioEls[n].cloneNode();
+      a.volume = Math.min(1, GAIN[n] * gain * 0.9);
+      a.playbackRate = rate;
+      try { a.preservesPitch = false; } catch (e) {}
+      a.play().catch(() => {});
+    }
   }
-
-  // retour chariot : glissement filtré qui descend, puis butée
-  function cr() {
-    if (!ensure()) return;
-    const t = ctx.currentTime;
-    const src = ctx.createBufferSource();
-    src.buffer = noise;
-    src.loop = true;
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.Q.value = 2.2;
-    bp.frequency.setValueAtTime(1500, t);
-    bp.frequency.exponentialRampToValueAtTime(420, t + 0.15);
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0008, t);
-    g.gain.exponentialRampToValueAtTime(0.14, t + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0008, t + 0.17);
-    src.connect(bp); bp.connect(g); g.connect(master);
-    src.start(t); src.stop(t + 0.18);
-    setTimeout(() => thock(700, 0.06, 0.4, 0.8), 145); // la butée
-  }
-
+  const j = (a, b) => a + Math.random() * (b - a);
   return {
-    key:   () => thock(2300, 0.05, 0.42, 0.5),
-    space: () => thock(850, 0.07, 0.34, 0.65),
-    back:  () => thock(1400, 0.05, 0.3, 0.45),
-    bell, cr,
     warm: ensure,
+    key: () => play('key', j(.94, 1.08), j(.85, 1.15)),
+    keyup: () => play('keyup', j(.92, 1.1), j(.8, 1.2)),
+    space: () => play('stroke', j(.8, .88), j(.7, .9)),
+    back: () => play('stroke', j(1.02, 1.12), j(.6, .8)),
+    cr: () => play('cr', j(.97, 1.03), 1),
+    bell: () => play('bell', 1, 1),
   };
 })();
 
-/* ——— événements d'édition ——— */
+/* ——— frappe ——— */
 
 ta.addEventListener('input', () => {
   justTyped = true;
@@ -231,13 +309,18 @@ ta.addEventListener('input', () => {
   scheduleSave();
 });
 
+/* l'ancrage ne suit que le clavier : au clic on repositionne le chariot
+   à la main, le papier ne bouge qu'à la frappe suivante */
+let lastKeyAt = 0;
 document.addEventListener('selectionchange', () => {
   if (document.activeElement !== ta) return;
   render();
-  if (!mouseDown) anchor(true);
+  if (!dragging && performance.now() - lastKeyAt < 250) anchor(true);
 });
 
+let keyDowned = false;
 ta.addEventListener('keydown', (e) => {
+  lastKeyAt = performance.now();
   if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     document.execCommand('insertText', false, '    ');
@@ -245,9 +328,10 @@ ta.addEventListener('keydown', (e) => {
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-    e.preventDefault();
-    flush();
-    return;
+    e.preventDefault(); flush(); return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+    e.preventDefault(); printPDF(); return;
   }
   if (e.isComposing) return;
   if (e.key === 'Enter') {
@@ -259,33 +343,155 @@ ta.addEventListener('keydown', (e) => {
   if (!store.sounds.keys || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === 'Backspace' || e.key === 'Delete') S.back();
   else if (e.key === ' ') S.space();
-  else if (e.key.length === 1) S.key();
+  else if (e.key.length === 1) { S.key(); keyDowned = true; }
+});
+ta.addEventListener('keyup', (e) => {
+  if (keyDowned && store.sounds.keys && e.key.length === 1) S.keyup();
+  keyDowned = false;
 });
 
 function carriageNudge() {
-  paper.animate(
+  doc.animate(
     [{ transform: 'translateX(7px)' }, { transform: 'translateX(0)' }],
     { duration: 150, easing: 'cubic-bezier(.2,.8,.3,1)' }
   );
 }
 
-/* souris : pas d'ancrage pendant une sélection au cran */
-ta.addEventListener('pointerdown', () => { mouseDown = true; });
-window.addEventListener('pointerup', () => { mouseDown = false; });
+/* ——— souris : le clic sur les feuilles pilote le texte caché ——— */
+
+let dragging = false, dragMode = 'char', dragAnchor = 0, dragAnchorRange = null;
+
+function globalIndexFromNode(node, offset) {
+  const host = node.nodeType === 3 ? node.parentElement : node;
+  const pt = host && host.closest ? host.closest('.ptext') : null;
+  if (!pt || node.nodeType !== 3) return null;
+  const pg = pages[+pt.dataset.page];
+  if (!pg) return null;
+  let acc = 0;
+  const walker = document.createTreeWalker(pt, NodeFilter.SHOW_TEXT);
+  let n;
+  while ((n = walker.nextNode())) {
+    if (n === node) return Math.min(pg.end, pg.start + acc + offset);
+    acc += n.nodeValue.length;
+  }
+  return null;
+}
+
+function pointToRange(x, y) {
+  if (document.caretRangeFromPoint) {
+    const r = document.caretRangeFromPoint(x, y);
+    if (r) return [r.startContainer, r.startOffset];
+  } else if (document.caretPositionFromPoint) {
+    const p = document.caretPositionFromPoint(x, y);
+    if (p) return [p.offsetNode, p.offset];
+  }
+  return [null, 0];
+}
+
+function indexFromPoint(x, y) {
+  let [node, off] = pointToRange(x, y);
+  let idx = node !== null ? globalIndexFromNode(node, off) : null;
+  if (idx !== null) return idx;
+
+  // hors du texte : viser l'intérieur de la feuille la plus proche
+  const text = ta.value;
+  for (let i = 0; i < pages.length; i++) {
+    const r = pages[i].textEl.getBoundingClientRect();
+    const zone = pages[i].el.getBoundingClientRect();
+    if (y < zone.top - GAP / 2) return i === 0 ? 0 : pages[i - 1].end;
+    if (y <= zone.bottom + GAP / 2 || i === pages.length - 1) {
+      const cx = Math.min(Math.max(x, r.left + 2), r.right - 2);
+      const cy = Math.min(Math.max(y, r.top + 2), r.bottom - 2);
+      [node, off] = pointToRange(cx, cy);
+      idx = node !== null ? globalIndexFromNode(node, off) : null;
+      if (idx !== null) return idx;
+      return y < (r.top + r.bottom) / 2 ? pages[i].start : pages[i].end;
+    }
+  }
+  return text.length;
+}
+
+const WORD_RE = /[\p{L}\p{N}_'’-]/u;
+function wordBounds(i) {
+  const t = ta.value;
+  let a = i, b = i;
+  if (i < t.length && WORD_RE.test(t[i])) { b = i + 1; }
+  while (a > 0 && WORD_RE.test(t[a - 1])) a--;
+  while (b < t.length && WORD_RE.test(t[b])) b++;
+  if (a === b && a > 0) a--; // rien à mordre : prend le caractère précédent
+  return [a, b];
+}
+function lineBounds(i) {
+  const t = ta.value;
+  let a = t.lastIndexOf('\n', i - 1) + 1;
+  let b = t.indexOf('\n', i);
+  if (b === -1) b = t.length; else b++;
+  return [a, b];
+}
+
+function applyDrag(f) {
+  let a0 = dragAnchor, f0 = f, fr = null;
+  if (dragMode !== 'char') {
+    fr = dragMode === 'word' ? wordBounds(f) : lineBounds(f);
+    if (fr[0] < dragAnchorRange[0]) { a0 = dragAnchorRange[1]; f0 = fr[0]; }
+    else { a0 = dragAnchorRange[0]; f0 = fr[1]; }
+  }
+  if (f0 < a0) ta.setSelectionRange(f0, a0, 'backward');
+  else ta.setSelectionRange(a0, f0, 'forward');
+}
+
+/* les pointer events portent detail=0 : on compte les clics nous-mêmes */
+let clickCount = 0, lastClickAt = 0, lastClickX = 0, lastClickY = 0;
+
+doc.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  const now = performance.now();
+  if (now - lastClickAt < 450 && Math.abs(e.clientX - lastClickX) < 6 &&
+      Math.abs(e.clientY - lastClickY) < 6) clickCount++;
+  else clickCount = 1;
+  lastClickAt = now; lastClickX = e.clientX; lastClickY = e.clientY;
+
+  const idx = indexFromPoint(e.clientX, e.clientY);
+  if (e.shiftKey) {
+    dragMode = 'char';
+    dragAnchor = ta.selectionDirection === 'backward' ? ta.selectionEnd : ta.selectionStart;
+    applyDrag(idx);
+  } else if (clickCount >= 3) {
+    dragMode = 'line'; dragAnchorRange = lineBounds(idx); dragAnchor = idx;
+    ta.setSelectionRange(dragAnchorRange[0], dragAnchorRange[1]);
+  } else if (clickCount === 2) {
+    dragMode = 'word'; dragAnchorRange = wordBounds(idx); dragAnchor = idx;
+    ta.setSelectionRange(dragAnchorRange[0], dragAnchorRange[1]);
+  } else {
+    dragMode = 'char'; dragAnchor = idx;
+    ta.setSelectionRange(idx, idx);
+  }
+  dragging = true;
+  try { doc.setPointerCapture(e.pointerId); } catch (err) {}
+  ta.focus({ preventScroll: true });
+  render();
+});
+
+doc.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  applyDrag(indexFromPoint(e.clientX, e.clientY));
+  render();
+});
+
+window.addEventListener('pointerup', () => { dragging = false; });
+
+/* cliquer le bureau ramène le clavier sans bouger le caret */
+stage.addEventListener('mousedown', (e) => {
+  if (doc.contains(e.target)) return;
+  e.preventDefault();
+  ta.focus({ preventScroll: true });
+});
 
 ta.addEventListener('focus', positionCaret);
 ta.addEventListener('blur', positionCaret);
 
-/* cliquer le papier (hors texte) ramène au texte */
-stage.addEventListener('mousedown', (e) => {
-  if (e.target === ta) return;
-  e.preventDefault();
-  const n = ta.value.length;
-  ta.setSelectionRange(n, n);
-  ta.focus({ preventScroll: true });
-});
-
-/* ——— défilement : la molette déplace la feuille ——— */
+/* ——— défilement : la molette déplace les feuilles ——— */
 
 window.addEventListener('wheel', (e) => {
   if (panel.classList.contains('open') && panel.contains(e.target)) return;
@@ -327,6 +533,7 @@ function loadProject(p) {
   ta.value = p.text;
   const n = p.text.length;
   ta.setSelectionRange(n, n);
+  lastPaginatedText = null;
   render();
   anchor(false);
   persist();
@@ -352,7 +559,7 @@ function renderList() {
 
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'sheet';
+    b.className = 'sheet-item';
     const t = document.createElement('span');
     t.className = 't';
     t.textContent = title(p);
@@ -436,36 +643,45 @@ tglCarriage.addEventListener('click', () => {
   refreshOpts(); persist();
 });
 
+/* imprimer / PDF : les mêmes lignes, sur de vraies pages A4 */
+function printPDF() {
+  flush();
+  printRoot.textContent = ta.value;
+  window.print();
+}
+$('#print-pdf').addEventListener('click', () => { closePanel(); printPDF(); });
+window.addEventListener('beforeprint', () => {
+  if (!printRoot.textContent) printRoot.textContent = ta.value;
+});
+window.addEventListener('afterprint', () => { printRoot.textContent = ''; });
+
 $('#export').addEventListener('click', () => {
   flush();
   const blob = new Blob([ta.value], { type: 'text/plain;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = title(cur).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'feuille';
-  a.download += '.txt';
+  a.download = (title(cur).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'feuille') + '.txt';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 });
 
-/* ——— mesure & démarrage ——— */
+/* ——— démarrage ——— */
 
-function measure() {
-  const cs = getComputedStyle(paper);
-  padTop = parseFloat(cs.paddingTop);
-  padRight = parseFloat(cs.paddingRight);
-}
-
-window.addEventListener('resize', () => { measure(); render(); anchor(false); });
+window.addEventListener('resize', () => { measureGeometry(); lastPaginatedText = null; render(); anchor(false); });
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', () => { render(); anchor(false); });
 }
 window.addEventListener('beforeunload', flush);
 document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
 
-measure();
+/* un premier geste réveille l'audio */
+window.addEventListener('pointerdown', () => S.warm(), { once: true });
+window.addEventListener('keydown', () => S.warm(), { once: true });
+
+measureGeometry();
 loadProject(cur);
 ta.focus({ preventScroll: true });
 
 if (document.fonts && document.fonts.ready) {
-  document.fonts.ready.then(() => { measure(); render(); anchor(false); });
+  document.fonts.ready.then(() => { lastPaginatedText = null; render(); anchor(false); });
 }

@@ -12,16 +12,14 @@
 
 <div id="stage">
   <div id="mover">
-    <div id="paper">
-      <div id="zone">
-        <div id="mirror" class="sheet-text" aria-hidden="true"></div>
-        <div id="caret" aria-hidden="true"></div>
-        <textarea id="ta" class="sheet-text" spellcheck="false" autocomplete="off"
-                  autocorrect="off" autocapitalize="off" aria-label="Feuille"></textarea>
-      </div>
-    </div>
+    <div id="doc"><div id="caret" aria-hidden="true"></div></div>
   </div>
 </div>
+
+<div id="meas" class="sheet-text" aria-hidden="true"></div>
+
+<textarea id="ta" spellcheck="false" autocomplete="off" autocorrect="off"
+          autocapitalize="off" aria-label="Feuille"></textarea>
 
 <div id="rail" aria-hidden="true"><div id="rail-marker"></div></div>
 
@@ -36,9 +34,12 @@
   <footer>
     <button id="tgl-keys" type="button" class="opt"></button>
     <button id="tgl-carriage" type="button" class="opt"></button>
+    <button id="print-pdf" type="button" class="opt">imprimer / PDF</button>
     <button id="export" type="button" class="opt">exporter la feuille (.txt)</button>
   </footer>
 </aside>
+
+<div id="print-root" class="sheet-text" aria-hidden="true"></div>
 
 <script src="app.js"></script>
 </body>

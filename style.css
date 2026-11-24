@@ -23,7 +23,18 @@
   --paper: #f1ecdf;
   --panel-bg: #ebe5d5;
   --stamp: #8c3b2e;
-  --paper-w: min(680px, 94vw);
+
+  /* géométrie A4 — recalculée par app.js selon l'écran (facteur k) */
+  --sheet-w: 680px;   /* 210 mm */
+  --sheet-h: 962px;   /* 297 mm */
+  --pad-top: 82px;    /* ~25 mm */
+  --pad-bottom: 82px;
+  --pad-left: 84px;   /* ~26 mm */
+  --pad-right: 64px;  /* ~20 mm */
+  --fs: 20px;
+  --lh: 38px;
+  --gap: 42px;        /* entre deux feuilles */
+
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='280'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.9'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
@@ -38,7 +49,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* grain d'ambiance très léger, fixe (comme un grain de lumière) */
+/* grain d'ambiance très léger, fixe */
 body::after {
   content: '';
   position: fixed; inset: 0;
@@ -58,10 +69,7 @@ body::after {
   z-index: 15;
 }
 
-#stage {
-  position: fixed; inset: 0;
-  overflow: hidden;
-}
+#stage { position: fixed; inset: 0; overflow: hidden; }
 
 #mover {
   position: absolute;
@@ -69,25 +77,27 @@ body::after {
   will-change: transform;
 }
 
-/* ——— la feuille ——— */
+#doc { position: relative; }
 
-#paper {
-  width: var(--paper-w);
-  margin: 0 auto;
-  padding: 90vh 64px 55vh 84px;
+/* ——— les feuilles A4 ——— */
+
+.sheet {
+  width: var(--sheet-w);
+  height: var(--sheet-h);
+  margin: 0 auto var(--gap);
+  padding: var(--pad-top) var(--pad-right) var(--pad-bottom) var(--pad-left);
   background:
-    linear-gradient(90deg, rgba(60, 45, 20, .045), transparent 70px,
-                    transparent calc(100% - 70px), rgba(60, 45, 20, .045)),
+    linear-gradient(90deg, rgba(60, 45, 20, .045), transparent 10%,
+                    transparent 90%, rgba(60, 45, 20, .045)),
     var(--paper);
   box-shadow:
     0 0 0 1px rgba(80, 65, 40, .10),
     0 2px 8px rgba(50, 38, 18, .18),
     0 24px 80px -12px rgba(50, 38, 18, .45);
   position: relative;
+  cursor: text;
 }
-
-/* grain du papier — se déplace avec la feuille */
-#paper::after {
+.sheet::after {
   content: '';
   position: absolute; inset: 0;
   background-image: var(--grain);
@@ -97,12 +107,24 @@ body::after {
   z-index: 5;
 }
 
-#zone { position: relative; }
+/* chaque feuille est poinçonnée des initiales, en relief ton sur ton */
+.sheet::before {
+  content: 'AG';
+  position: absolute;
+  top: calc(var(--pad-top) * .32);
+  right: calc(var(--pad-right) * .55);
+  font-size: calc(var(--fs) * .78);
+  letter-spacing: .1em;
+  color: rgba(80, 65, 40, .085);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .45);
+  transform: rotate(-6deg);
+  pointer-events: none;
+}
 
 .sheet-text {
   font-family: 'Special Elite', 'Courier New', Courier, monospace;
-  font-size: 20px;
-  line-height: 1.9;
+  font-size: var(--fs);
+  line-height: var(--lh);
   letter-spacing: .01em;
   white-space: pre-wrap;
   overflow-wrap: break-word;
@@ -112,22 +134,35 @@ body::after {
   tab-size: 4;
 }
 
-#mirror {
+.ptext {
   position: relative;
-  min-height: 38px;
+  height: 100%;
+  overflow: hidden;
   color: var(--ink);
   text-shadow: 0 0 .6px rgba(43, 35, 23, .5);
-  z-index: 1;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.ptext .sel { background: rgba(140, 108, 55, .30); }
+
+/* mesureur hors écran, mêmes métriques que .ptext */
+#meas {
+  position: absolute;
+  top: 0;
+  left: -200vw;
+  width: calc(var(--sheet-w) - var(--pad-left) - var(--pad-right));
+  visibility: hidden;
+  pointer-events: none;
 }
 
 #caret {
   position: absolute;
-  width: 10px;
+  width: calc(var(--fs) * 0.5);
   background: var(--ink);
   border-radius: 1px;
   opacity: .34;
   pointer-events: none;
-  z-index: 2;
+  z-index: 6;
   animation: caret-breathe 1.5s ease-in-out infinite;
 }
 @keyframes caret-breathe {
@@ -135,22 +170,18 @@ body::after {
   50% { opacity: .14; }
 }
 
+/* la zone de saisie réelle, invisible : le clavier lui parle,
+   les feuilles ne font que l'imprimer */
 #ta {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  border: none;
-  outline: none;
-  resize: none;
-  overflow: hidden;
-  background: transparent;
-  color: transparent;
-  caret-color: transparent;
-  z-index: 3;
+  position: fixed;
+  left: 2px; bottom: 2px;
+  width: 2px; height: 2px;
+  opacity: 0;
+  border: none; outline: none; resize: none;
+  background: transparent; color: transparent;
+  pointer-events: none;
+  font-size: 18px; /* évite le zoom automatique d'iOS sur champ focalisé */
 }
-#ta::selection { background: rgba(140, 108, 55, .30); color: transparent; }
 
 /* ——— rail du chariot ——— */
 
@@ -180,30 +211,29 @@ body::after {
   position: fixed;
   z-index: 40;
   top: 22px;
-  left: max(14px, calc(50% - var(--paper-w) / 2 + 20px));
+  left: max(14px, calc(50% - var(--sheet-w) / 2 + 20px));
   width: 58px; height: 58px;
   border-radius: 50%;
-  border: 1px solid rgba(140, 59, 46, .14);
-  color: rgba(140, 59, 46, .19);
+  border: 1px solid rgba(154, 92, 74, .34);
+  color: rgba(154, 92, 74, .42);
   background: transparent;
   font-family: inherit;
   font-size: 18px;
   letter-spacing: .08em;
   text-indent: .08em;
   transform: rotate(-8deg);
-  mix-blend-mode: multiply;
   cursor: pointer;
   transition: color .2s, border-color .2s, transform .2s, left .26s cubic-bezier(.3, .8, .3, 1);
 }
 #stamp::before {
   content: '';
   position: absolute; inset: 4px;
-  border: 1px solid rgba(140, 59, 46, .09);
+  border: 1px solid rgba(154, 92, 74, .22);
   border-radius: 50%;
 }
 #stamp:hover, #stamp.active {
-  color: rgba(140, 59, 46, .60);
-  border-color: rgba(140, 59, 46, .45);
+  color: rgba(154, 92, 74, .78);
+  border-color: rgba(154, 92, 74, .62);
   transform: rotate(-5deg);
 }
 #stamp.active { left: 22px; }
@@ -285,12 +315,12 @@ body::after {
   border-bottom: 1px dashed rgba(60, 45, 20, .18);
 }
 
-#sheet-list .sheet {
+#sheet-list .sheet-item {
   display: block;
   width: 100%;
   padding: 11px 26px 11px 2px;
 }
-#sheet-list .sheet:hover { background: rgba(60, 45, 20, .045); }
+#sheet-list .sheet-item:hover { background: rgba(60, 45, 20, .045); }
 
 #sheet-list .t {
   display: block;
@@ -341,3 +371,20 @@ body::after {
   color: var(--ink-soft) !important;
 }
 .opt:hover { color: var(--ink) !important; }
+
+/* ——— impression : les mêmes lignes, sur de vraies pages A4 ——— */
+
+#print-root { display: none; }
+
+@media print {
+  @page { size: A4; margin: 25mm 20mm 25mm 26mm; }
+  html, body { height: auto; overflow: visible; background: #fff; }
+  body::after, #stage, #meas, #ta, #rail, #stamp, #scrim, #panel { display: none !important; }
+  #print-root {
+    display: block;
+    font-size: 6.165mm;   /* 20 px à l'échelle 210 mm = 680 px */
+    line-height: 11.71mm; /* 38 px */
+    letter-spacing: .01em;
+    color: #1c1813;
+  }
+}
