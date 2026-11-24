@@ -183,8 +183,8 @@ body::after {
   left: max(14px, calc(50% - var(--paper-w) / 2 + 20px));
   width: 58px; height: 58px;
   border-radius: 50%;
-  border: 1.5px solid rgba(140, 59, 46, .50);
-  color: rgba(140, 59, 46, .68);
+  border: 1px solid rgba(140, 59, 46, .14);
+  color: rgba(140, 59, 46, .19);
   background: transparent;
   font-family: inherit;
   font-size: 18px;
@@ -198,12 +198,12 @@ body::after {
 #stamp::before {
   content: '';
   position: absolute; inset: 4px;
-  border: 1px solid rgba(140, 59, 46, .36);
+  border: 1px solid rgba(140, 59, 46, .09);
   border-radius: 50%;
 }
 #stamp:hover, #stamp.active {
-  color: rgba(140, 59, 46, .92);
-  border-color: rgba(140, 59, 46, .75);
+  color: rgba(140, 59, 46, .60);
+  border-color: rgba(140, 59, 46, .45);
   transform: rotate(-5deg);
 }
 #stamp.active { left: 22px; }
