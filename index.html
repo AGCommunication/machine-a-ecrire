@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Machine à écrire</title>
+<meta name="description" content="Un éditeur de texte des plus sobres, au ressenti machine à écrire.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='27' fill='none' stroke='%238c3b2e' stroke-width='3'/%3E%3Ctext x='32' y='41' font-family='Courier New' font-size='24' text-anchor='middle' fill='%238c3b2e'%3EAG%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="stage">
+  <div id="mover">
+    <div id="paper">
+      <div id="zone">
+        <div id="mirror" class="sheet-text" aria-hidden="true"></div>
+        <div id="caret" aria-hidden="true"></div>
+        <textarea id="ta" class="sheet-text" spellcheck="false" autocomplete="off"
+                  autocorrect="off" autocapitalize="off" aria-label="Feuille"></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="rail" aria-hidden="true"><div id="rail-marker"></div></div>
+
+<button id="stamp" type="button" title="Feuilles" aria-label="Ouvrir les feuilles">AG</button>
+
+<div id="scrim"></div>
+
+<aside id="panel" aria-hidden="true">
+  <h1>Feuilles</h1>
+  <button id="new-sheet" type="button">+ nouvelle feuille</button>
+  <ul id="sheet-list"></ul>
+  <footer>
+    <button id="tgl-keys" type="button" class="opt"></button>
+    <button id="tgl-carriage" type="button" class="opt"></button>
+    <button id="export" type="button" class="opt">exporter la feuille (.txt)</button>
+  </footer>
+</aside>
+
+<script src="app.js"></script>
+</body>
+</html>
