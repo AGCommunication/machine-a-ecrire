@@ -35,12 +35,14 @@ function loadStore() {
     if (s && Array.isArray(s.projects) && s.projects.length) {
       s.sounds = Object.assign({ keys: true, carriage: true }, s.sounds);
       s.bg = s.bg || 'bureau';
-      s.strict = !!s.strict;
+      // le mode machine est la manière par défaut d'utiliser l'éditeur
+      if (!s.strictDefaulted) { s.strict = true; s.strictDefaulted = true; }
+      else s.strict = !!s.strict;
       return s;
     }
   } catch (e) { /* réinitialise */ }
   const p = newProject();
-  return { projects: [p], currentId: p.id, sounds: { keys: true, carriage: true }, bg: 'bureau', strict: false };
+  return { projects: [p], currentId: p.id, sounds: { keys: true, carriage: true }, bg: 'bureau', strict: true, strictDefaulted: true };
 }
 
 const store = loadStore();

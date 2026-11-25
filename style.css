@@ -201,6 +201,9 @@ body::after {
   color: #20180d;
   width: 0;
   white-space: pre;
+  /* le rect mesuré est la boîte du glyphe : pas d'interligne,
+     sinon le demi-interligne pousse la surfrappe sous la ligne */
+  line-height: 1;
 }
 .strike span {
   position: absolute;

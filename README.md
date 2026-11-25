@@ -35,8 +35,9 @@ juste l'écriture.
 - **Exporter en PDF.** « Imprimer / PDF » dans le volet (ou `Ctrl`/`Cmd`+`P`)
   compose le texte sur de vraies pages A4, avec la même police et les mêmes
   marges — le dialogue d'impression du navigateur enregistre en PDF.
-- **Le mode machine.** En option, dans le volet : l'éditeur retrouve les
-  manières d'une vraie machine. Plus de retour à la ligne automatique — la
+- **Le mode machine.** C'est la manière par défaut d'utiliser l'éditeur
+  (débrayable dans le volet pour retrouver l'édition libre) : l'éditeur a
+  les manières d'une vraie machine. Plus de retour à la ligne automatique — la
   sonnette avertit, puis le chariot bute contre la marge et les lettres
   s'écrasent les unes sur les autres, en pâté. Le retour chariot est à vous
   (`Entrée`). Rien ne s'efface : le retour arrière recule le chariot sans
