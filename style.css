@@ -193,11 +193,28 @@ body::after {
 }
 .ptext .sel { background: rgba(140, 108, 55, .30); }
 
+/* le blanco : une couche de peinture plus blanche que le papier */
+.ptext .blanco {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+  background: #f9f6ee;
+  border-radius: 2px;
+  box-shadow: 0 0 2px rgba(255, 253, 246, .8), 0 0 0 .5px rgba(120, 105, 80, .07);
+  line-height: 1;
+}
+.ptext .blanco > span {
+  position: absolute;
+  color: #241c10;
+  text-shadow: 0 0 .6px rgba(36, 28, 16, .6);
+}
+body.blanco-mode .sheet { cursor: crosshair; }
+
 /* surfrappes du mode machine : l'encre se superpose */
 .strike {
   position: absolute;
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
   color: #20180d;
   width: 0;
   white-space: pre;

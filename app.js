@@ -179,8 +179,57 @@ function render() {
     }
     pg.textEl.replaceChildren(frag);
   }
+  drawBlanco(text);
   drawStrikes(text);
   positionCaret();
+}
+
+/* rect (écran) du caractère d'index global i, dans sa feuille */
+function rectOfChar(i) {
+  const pg = pages.find(p => i >= p.start && i < p.end);
+  if (!pg) return null;
+  let off = i - pg.start, node = null;
+  const walker = document.createTreeWalker(pg.textEl, NodeFilter.SHOW_TEXT);
+  let n;
+  while ((n = walker.nextNode())) {
+    if (off < n.nodeValue.length) { node = n; break; }
+    off -= n.nodeValue.length;
+  }
+  if (!node) return null;
+  const range = document.createRange();
+  range.setStart(node, off); range.setEnd(node, off + 1);
+  const r = range.getClientRects()[0];
+  return r ? { r, pg } : null;
+}
+
+/* le blanco : la peinture couvre le caractère ; retapé (valeur 2),
+   la lettre neuve s'imprime sur la couche */
+function drawBlanco(text) {
+  const bl = cur.blanco;
+  if (!bl) return;
+  for (const k of Object.keys(bl)) {
+    const i = +k;
+    if (i >= text.length || text[i] === '\n') { delete bl[k]; continue; }
+    const hit = rectOfChar(i);
+    if (!hit) continue;
+    const { r, pg } = hit;
+    const tr = pg.textEl.getBoundingClientRect();
+    const patch = document.createElement('span');
+    patch.className = 'blanco sheet-text';
+    patch.style.left = (r.left - tr.left - 1.5) + 'px';
+    patch.style.top = (r.top - tr.top - 2) + 'px';
+    patch.style.width = (r.width + 3) + 'px';
+    patch.style.height = (r.height + 4) + 'px';
+    patch.style.transform = 'rotate(' + ((hash(i * 13 + 5) - .5) * 1.6).toFixed(2) + 'deg)';
+    if (bl[k] === 2) {
+      const g = document.createElement('span');
+      g.textContent = text[i];
+      g.style.left = '1.5px';
+      g.style.top = '2px';
+      patch.appendChild(g);
+    }
+    pg.textEl.appendChild(patch);
+  }
 }
 
 /* les surfrappes : des lettres frappées sur d'autres, l'encre reste */
@@ -193,20 +242,9 @@ function drawStrikes(text) {
   for (const k of Object.keys(st)) {
     const i = +k;
     if (i >= text.length || text[i] === '\n') { delete st[k]; continue; }
-    const pg = pages.find(p => i >= p.start && i < p.end);
-    if (!pg) continue;
-    let off = i - pg.start, node = null;
-    const walker = document.createTreeWalker(pg.textEl, NodeFilter.SHOW_TEXT);
-    let n;
-    while ((n = walker.nextNode())) {
-      if (off < n.nodeValue.length) { node = n; break; }
-      off -= n.nodeValue.length;
-    }
-    if (!node) continue;
-    const range = document.createRange();
-    range.setStart(node, off); range.setEnd(node, off + 1);
-    const r = range.getClientRects()[0];
-    if (!r) continue;
+    const hit = rectOfChar(i);
+    if (!hit) continue;
+    const { r, pg } = hit;
     const tr = pg.textEl.getBoundingClientRect();
     const wrap = document.createElement('span');
     wrap.className = 'strike sheet-text';
@@ -226,11 +264,10 @@ function drawStrikes(text) {
   }
 }
 
-function remapStrikes(oldText, newText) {
-  const st = cur.strikes;
-  if (!st || oldText === newText) return;
-  const keys = Object.keys(st);
-  if (!keys.length) return;
+function remapDict(dict, oldText, newText) {
+  if (!dict) return dict;
+  const keys = Object.keys(dict);
+  if (!keys.length || oldText === newText) return dict;
   const ol = oldText.length, nl = newText.length;
   let p = 0;
   while (p < ol && p < nl && oldText[p] === newText[p]) p++;
@@ -240,11 +277,15 @@ function remapStrikes(oldText, newText) {
   const ns = {};
   for (const k of keys) {
     const i = +k;
-    if (i < p) ns[i] = st[k];
-    else if (i >= delEnd) ns[i + d] = st[k];
-    /* une surfrappe dans la zone réécrite disparaît avec son support */
+    if (i < p) ns[i] = dict[k];
+    else if (i >= delEnd) ns[i + d] = dict[k];
+    /* une marque dans la zone réécrite disparaît avec son support */
   }
-  cur.strikes = ns;
+  return ns;
+}
+function remapMarks(oldText, newText) {
+  cur.strikes = remapDict(cur.strikes, oldText, newText);
+  cur.blanco = remapDict(cur.blanco, oldText, newText);
 }
 
 function caretRect() {
@@ -313,7 +354,8 @@ const S = (() => {
     cr: 'sounds/retour.wav',     // retour chariot
     bell: 'sounds/sonnette.wav', // sonnette de marge
   };
-  const GAIN = { key: .9, keyup: .22, stroke: .55, cr: .8, bell: .95 };
+  /* la sonnette doit dominer : frappes en retrait, timbre en avant */
+  const GAIN = { key: .5, keyup: .14, stroke: .35, cr: .7, bell: 1.5 };
   let ctx = null, master = null;
   const raw = {}, buffers = {}, audioEls = {};
 
@@ -377,7 +419,9 @@ const S = (() => {
     space: () => play('stroke', j(.8, .88), j(.7, .9)),
     back: () => play('stroke', j(1.02, 1.12), j(.6, .8)),
     // la mécanique bloquée fait clac-clac, rien à voir avec une frappe
-    jam: () => { play('stroke', j(.53, .58), 1); setTimeout(() => play('stroke', .48, .7), 45); },
+    jam: () => { play('stroke', j(.53, .58), 1.7); setTimeout(() => play('stroke', .48, 1.2), 45); },
+    // deux petits tapotements de pinceau
+    blanco: () => { play('keyup', .5, 2.4); setTimeout(() => play('keyup', .45, 2), 90); },
     // la sonnette se détache de la frappe qui la déclenche
     bell: () => setTimeout(() => play('bell', 1, 1), 70),
     cr: () => play('cr', j(.97, 1.03), 1),
@@ -388,7 +432,7 @@ const S = (() => {
 
 ta.addEventListener('input', () => {
   justTyped = true;
-  remapStrikes(prevText, ta.value);
+  remapMarks(prevText, ta.value);
   prevText = ta.value;
   render();
   anchor(true);
@@ -431,16 +475,18 @@ function strictType(ch) {
     jamFeedback();
     return;
   }
+  const onBlanco = cur.blanco && cur.blanco[i] === 1;
   if (over) {
-    if (ch === ' ') {
+    if (ch === ' ' && !onBlanco) {
       // l'espace n'imprime rien : le chariot avance
       ta.setSelectionRange(i + 1, i + 1);
       if (store.sounds.keys) S.space();
       justTyped = true; render(); anchor(true);
-    } else if (text[i] === ' ') {
-      // frapper sur un blanc : la lettre s'y imprime
+    } else if (text[i] === ' ' || onBlanco) {
+      // frapper sur un blanc, ou sur le blanco : la lettre s'y imprime
       ta.setSelectionRange(i, i + 1);
       document.execCommand('insertText', false, ch);
+      if (onBlanco) { cur.blanco[i] = 2; render(); scheduleSave(); } // la peinture reste dessous
       if (store.sounds.keys) S.key();
     } else {
       // frapper sur une lettre : les deux encres se superposent
@@ -682,7 +728,50 @@ doc.addEventListener('pointermove', (e) => {
   render();
 });
 
-window.addEventListener('pointerup', () => { dragging = false; });
+window.addEventListener('pointerup', () => {
+  if (dragging && blancoMode) {
+    const a = ta.selectionStart, b = ta.selectionEnd;
+    if (b > a) { applyBlanco(a, b); exitBlanco(); }
+  }
+  dragging = false;
+});
+
+/* ——— le blanco : une couche posée sur la feuille, pas un effacement ——— */
+
+let blancoMode = false;
+
+function enterBlanco() {
+  blancoMode = true;
+  document.body.classList.add('blanco-mode');
+}
+function exitBlanco() {
+  blancoMode = false;
+  document.body.classList.remove('blanco-mode');
+}
+
+function applyBlanco(a, b) {
+  const text = ta.value;
+  cur.blanco = cur.blanco || {};
+  cur.strikes = cur.strikes || {};
+  for (let i = a; i < b; i++) {
+    if (text[i] === '\n') continue;
+    cur.blanco[i] = cur.blanco[i] || 1;
+    delete cur.strikes[i]; // la peinture couvre aussi les surfrappes
+  }
+  ta.setSelectionRange(b, b);
+  ta.focus({ preventScroll: true });
+  if (store.sounds.keys) S.blanco();
+  render();
+  scheduleSave();
+}
+
+/* le texte « au propre » : ce qui reste couvert de blanco devient blanc */
+function cleanText() {
+  const t = ta.value, bl = cur.blanco || {};
+  let out = '';
+  for (let i = 0; i < t.length; i++) out += (bl[i] === 1 && t[i] !== '\n') ? ' ' : t[i];
+  return out;
+}
 
 /* cliquer le bureau ramène le clavier sans bouger le caret */
 stage.addEventListener('mousedown', (e) => {
@@ -733,6 +822,7 @@ function meta(p) {
 function loadProject(p) {
   cur = p;
   cur.strikes = cur.strikes || {};
+  cur.blanco = cur.blanco || {};
   store.currentId = p.id;
   ta.value = p.text;
   prevText = p.text;
@@ -817,9 +907,17 @@ function togglePanel() {
   panel.classList.contains('open') ? closePanel() : openPanel();
 }
 scrim.addEventListener('click', closePanel);
-/* Échap ouvre et ferme le volet — utile quand aucun coin de feuille n'est à l'écran */
+/* Échap renonce au blanco, sinon ouvre et ferme le volet —
+   utile quand aucun coin de feuille n'est à l'écran */
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') togglePanel();
+  if (e.key !== 'Escape') return;
+  if (blancoMode) { exitBlanco(); return; }
+  togglePanel();
+});
+
+$('#blanco').addEventListener('click', () => {
+  closePanel();
+  enterBlanco();
 });
 
 $('#new-sheet').addEventListener('click', () => {
@@ -873,18 +971,18 @@ tglCarriage.addEventListener('click', () => {
 /* imprimer / PDF : les mêmes lignes, sur de vraies pages A4 */
 function printPDF() {
   flush();
-  printRoot.textContent = ta.value;
+  printRoot.textContent = cleanText();
   window.print();
 }
 $('#print-pdf').addEventListener('click', () => { closePanel(); printPDF(); });
 window.addEventListener('beforeprint', () => {
-  if (!printRoot.textContent) printRoot.textContent = ta.value;
+  if (!printRoot.textContent) printRoot.textContent = cleanText();
 });
 window.addEventListener('afterprint', () => { printRoot.textContent = ''; });
 
 $('#export').addEventListener('click', () => {
   flush();
-  const blob = new Blob([ta.value], { type: 'text/plain;charset=utf-8' });
+  const blob = new Blob([cleanText()], { type: 'text/plain;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = (title(cur).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'feuille') + '.txt';

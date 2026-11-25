@@ -47,6 +47,12 @@ juste l'écriture.
   surfrappes restent sur la feuille même de retour en mode normal : ce sont
   les cicatrices du premier jet. L'export `.txt` et le PDF donnent, eux, la
   copie au propre.
+- **Le blanco.** « Poser du blanco » dans le volet, puis sélectionner le
+  texte à couvrir : une couche d'un blanc plus clair que le papier se pose
+  sur les caractères — ce n'est pas un effacement, la peinture est sur la
+  feuille. On retape ensuite par-dessus, la lettre neuve s'imprime sur la
+  couche. À l'export, ce qui reste couvert devient du blanc. `Échap` pour
+  renoncer au pinceau.
 
 ## Utilisation
 
