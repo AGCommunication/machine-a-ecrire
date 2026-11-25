@@ -129,11 +129,16 @@ function syncPages(text) {
     textEl.className = 'ptext sheet-text';
     textEl.dataset.page = pages.length;
     el.appendChild(textEl);
-    // chaque feuille porte son tampon, poinçonné au coin supérieur gauche
+    // chaque feuille porte son poinçon — un curseur de texte — au coin
+    // supérieur gauche
     const st = document.createElement('button');
     st.type = 'button';
     st.className = 'stamp';
-    st.textContent = 'AG';
+    st.innerHTML = '<svg viewBox="0 0 24 40" fill="none" stroke="currentColor"' +
+      ' stroke-width="3" stroke-linecap="round" aria-hidden="true">' +
+      '<path d="M4.5 5Q12 6 12 13V17"/><path d="M19.5 5Q12 6 12 13"/>' +
+      '<path d="M6 22H18"/><path d="M12 22V28"/>' +
+      '<path d="M4.5 35Q12 34 12 27"/><path d="M19.5 35Q12 34 12 27"/></svg>';
     st.title = 'Feuilles';
     st.setAttribute('aria-label', 'Ouvrir les feuilles');
     st.addEventListener('click', togglePanel);
