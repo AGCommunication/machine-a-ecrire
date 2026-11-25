@@ -266,8 +266,11 @@ function positionCaret() {
 
   const pg = pages.find(p => p.textEl.contains(focusSpan));
   caretDistRight = pg ? pg.textEl.getBoundingClientRect().right - r.left : 999;
+  // à l'approche de la marge, l'index du rail vire au rouge : le signal
+  // reste visible même machine muette
+  railMark.classList.toggle('near', caretDistRight < 110 * K);
   if (justTyped && store.sounds.carriage) {
-    if (caretDistRight < 85 * K) { if (!belled) { belled = true; S.bell(); } }
+    if (caretDistRight < 110 * K) { if (!belled) { belled = true; S.bell(); } }
     else if (caretDistRight > 170 * K) belled = false;
   }
   justTyped = false;
@@ -310,7 +313,7 @@ const S = (() => {
     cr: 'sounds/retour.wav',     // retour chariot
     bell: 'sounds/sonnette.wav', // sonnette de marge
   };
-  const GAIN = { key: .9, keyup: .22, stroke: .55, cr: .8, bell: .5 };
+  const GAIN = { key: .9, keyup: .22, stroke: .55, cr: .8, bell: .95 };
   let ctx = null, master = null;
   const raw = {}, buffers = {}, audioEls = {};
 
@@ -373,9 +376,11 @@ const S = (() => {
     keyup: () => play('keyup', j(.92, 1.1), j(.8, 1.2)),
     space: () => play('stroke', j(.8, .88), j(.7, .9)),
     back: () => play('stroke', j(1.02, 1.12), j(.6, .8)),
-    jam: () => play('stroke', j(.58, .66), j(.8, 1)),
+    // la mécanique bloquée fait clac-clac, rien à voir avec une frappe
+    jam: () => { play('stroke', j(.53, .58), 1); setTimeout(() => play('stroke', .48, .7), 45); },
+    // la sonnette se détache de la frappe qui la déclenche
+    bell: () => setTimeout(() => play('bell', 1, 1), 70),
     cr: () => play('cr', j(.97, 1.03), 1),
-    bell: () => play('bell', 1, 1),
   };
 })();
 
@@ -401,8 +406,10 @@ function marginLocked(ch) { return caretDistRight < charW(ch) * 0.92; }
 
 function jamFeedback() {
   if (store.sounds.keys) S.jam();
-  doc.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(1.5px)' }, { transform: 'translateX(0)' }],
-    { duration: 70 });
+  doc.animate([
+    { transform: 'translateX(0)' }, { transform: 'translateX(2.5px)' },
+    { transform: 'translateX(-1.5px)' }, { transform: 'translateX(0)' },
+  ], { duration: 110, easing: 'ease-out' });
 }
 
 function addStrike(i, ch) {
