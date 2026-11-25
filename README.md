@@ -23,10 +23,15 @@ juste l'écriture.
   chariot, sonnette à l'approche de la marge droite : de vrais
   enregistrements (projet [daktilo](https://github.com/orhun/daktilo),
   MIT/Apache-2.0), avec de légères variations à chaque frappe. Débrayables.
-- **Le tampon `AG`.** Chaque feuille est poinçonnée des initiales, en relief
-  dans la marge. Le tampon en haut à gauche de l'écran ouvre le volet des
-  feuilles : vos projets d'écriture, enregistrés en continu dans le
-  navigateur (`localStorage`), exportables en `.txt` ou en PDF.
+- **Le tampon `AG`.** Chaque feuille est tamponnée des initiales au coin
+  supérieur gauche de sa marge ; le tampon voyage avec le papier. Un clic
+  dessus (ou `Échap`) ouvre le volet des feuilles : vos projets d'écriture,
+  enregistrés en continu dans le navigateur (`localStorage`), exportables
+  en `.txt` ou en PDF.
+- **Le fond, au choix.** Six ambiances dans le volet : le bureau, deux
+  dégradés doux (aube, lagune), une tapisserie fleurie de grand-mère, et
+  deux semis façon fonds de messagerie — lettres sur bleu nuit, et
+  iconographie steampunk sur beige. Tout est dessiné en SVG, dans `bg/`.
 - **Exporter en PDF.** « Imprimer / PDF » dans le volet (ou `Ctrl`/`Cmd`+`P`)
   compose le texte sur de vraies pages A4, avec la même police et les mêmes
   marges — le dialogue d'impression du navigateur enregistre en PDF.
@@ -46,8 +51,8 @@ python3 -m http.server 8000
 
 | Geste | Effet |
 |---|---|
-| clic sur le tampon `AG` | ouvre / ferme le volet des feuilles |
-| `Échap` | ferme le volet |
+| clic sur le tampon `AG` d'une feuille | ouvre / ferme le volet des feuilles |
+| `Échap` | ouvre / ferme le volet |
 | molette / toucher | fait défiler les feuilles |
 | clic, double-clic, glisser | place le chariot, sélectionne un mot, une plage |
 | `Ctrl`/`Cmd` + `P` | imprime / exporte en PDF |

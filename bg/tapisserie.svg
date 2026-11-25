@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="470" viewBox="0 0 420 470">
+  <defs>
+    <g id="rose">
+      <path d="M0,-14 A8,8 0 0 1 12.1,-7 A8,8 0 0 1 12.1,7 A8,8 0 0 1 0,14 A8,8 0 0 1 -12.1,7 A8,8 0 0 1 -12.1,-7 A8,8 0 0 1 0,-14 Z"
+            fill="#dca3a0" stroke="#b97f7c" stroke-width="1"/>
+      <path d="M0,-14 A8,8 0 0 1 12.1,-7 A8,8 0 0 1 12.1,7 A8,8 0 0 1 0,14 A8,8 0 0 1 -12.1,7 A8,8 0 0 1 -12.1,-7 A8,8 0 0 1 0,-14 Z"
+            fill="#d08e8a" stroke="#ad6f6b" stroke-width=".9" transform="rotate(30) scale(.62)"/>
+      <circle r="4.6" fill="#b06d69"/>
+      <path d="M-2.6,-1.2 A2.8,2.8 0 1 1 -1,2.6 A1.7,1.7 0 1 0 1.4,.4" fill="none" stroke="#e7c2bf" stroke-width=".9" stroke-linecap="round"/>
+    </g>
+    <g id="leaf">
+      <path d="M0,0 Q7,-9 17,-7.5 Q11,2.5 0,0 Z" fill="#9aa97e" stroke="#7d8c63" stroke-width=".9"/>
+      <path d="M1.5,-.7 Q8,-4.5 14.5,-6" fill="none" stroke="#7d8c63" stroke-width=".7"/>
+    </g>
+    <g id="sprig" fill="#f7f3e9" stroke="none" opacity=".92">
+      <path d="M0,2 Q5,-14 3.5,-33" fill="none" stroke="#f7f3e9" stroke-width="1.8"/>
+      <ellipse rx="5" ry="2.4" transform="translate(6.2,-6.5) rotate(26)"/>
+      <ellipse rx="5" ry="2.4" transform="translate(-2.4,-9.5) rotate(152)"/>
+      <ellipse rx="4.7" ry="2.3" transform="translate(7.4,-14.5) rotate(20)"/>
+      <ellipse rx="4.7" ry="2.3" transform="translate(-1.3,-18) rotate(156)"/>
+      <ellipse rx="4.4" ry="2.1" transform="translate(7.6,-22.5) rotate(14)"/>
+      <ellipse rx="4.4" ry="2.1" transform="translate(-0.4,-26) rotate(162)"/>
+      <ellipse rx="3.6" ry="1.9" transform="translate(5.8,-30.5) rotate(30)"/>
+      <ellipse rx="3.4" ry="1.9" transform="translate(3.6,-35) rotate(80)"/>
+    </g>
+    <g id="bud">
+      <path d="M0,-7 Q5,-3 3.5,3 Q0,7 -3.5,3 Q-5,-3 0,-7 Z" fill="#cf8d89" stroke="#ad6f6b" stroke-width=".9"/>
+      <path d="M0,6 Q-4,9 -2,14 M0,6 Q4,9 2,14" fill="none" stroke="#7d8c63" stroke-width="1"/>
+    </g>
+  </defs>
+
+  <rect width="420" height="470" fill="#e6ded1"/>
+
+  <use href="#sprig" transform="translate(205,75) rotate(-14) scale(1.5)"/>
+  <use href="#sprig" transform="translate(75,345) rotate(24) scale(1.6)"/>
+  <use href="#sprig" transform="translate(372,235) rotate(-38) scale(1.35)"/>
+  <use href="#sprig" transform="translate(38,208) rotate(68) scale(1.2)"/>
+  <use href="#sprig" transform="translate(300,448) rotate(-80) scale(1.15)"/>
+  <use href="#sprig" transform="translate(150,170) rotate(130) scale(1.1)"/>
+
+  <g transform="translate(95,120) rotate(-8) scale(1.5)">
+    <use href="#leaf" transform="translate(-9,10) rotate(130) scale(1.25)"/>
+    <use href="#leaf" transform="translate(12,7) rotate(35) scale(1.2)"/>
+    <use href="#leaf" transform="translate(-13,-6) rotate(-140) scale(1.05)"/>
+    <use href="#rose"/>
+  </g>
+
+  <g transform="translate(330,102) rotate(14) scale(1.1)">
+    <use href="#leaf" transform="translate(8,10) rotate(60) scale(1.15)"/>
+    <use href="#leaf" transform="translate(-12,3) rotate(-160) scale(1.0)"/>
+    <use href="#rose"/>
+  </g>
+
+  <g transform="translate(296,345) rotate(-5) scale(1.35)">
+    <use href="#leaf" transform="translate(-10,9) rotate(145) scale(1.2)"/>
+    <use href="#leaf" transform="translate(12,-5) rotate(-15) scale(1.1)"/>
+    <use href="#leaf" transform="translate(2,13) rotate(80) scale(1.0)"/>
+    <use href="#rose"/>
+  </g>
+
+  <g transform="translate(176,262) rotate(18)">
+    <use href="#bud" transform="scale(1.2)"/>
+    <use href="#leaf" transform="translate(-3,13) rotate(115) scale(.9)"/>
+  </g>
+  <g transform="translate(55,38) rotate(-30)">
+    <use href="#bud" transform="scale(.95)"/>
+  </g>
+  <g transform="translate(395,415) rotate(12)">
+    <use href="#bud"/>
+    <use href="#leaf" transform="translate(-4,12) rotate(150) scale(.85)"/>
+  </g>
+
+  <circle cx="250" cy="180" r="2.2" fill="#c89b97"/>
+  <circle cx="135" cy="415" r="2.2" fill="#c89b97"/>
+  <circle cx="18" cy="120" r="1.8" fill="#aab58e"/>
+  <circle cx="402" cy="60" r="1.8" fill="#aab58e"/>
+  <circle cx="222" cy="375" r="1.8" fill="#c89b97"/>
+  <circle cx="330" cy="255" r="1.6" fill="#aab58e"/>
+</svg>

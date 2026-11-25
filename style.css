@@ -43,10 +43,37 @@
 html, body { height: 100%; overflow: hidden; }
 
 body {
+  --vig: .22;
   background: radial-gradient(130vmax 90vmax at 50% 20%, #a89d87, #857a66 80%);
   font-family: 'Special Elite', 'Courier New', Courier, monospace;
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
+}
+
+/* ——— les fonds, au choix dans le volet ——— */
+
+body[data-bg="aube"] {
+  --vig: .10;
+  background: linear-gradient(165deg, #f3e2d3, #e3c4b2 48%, #c3a4a6 100%);
+}
+body[data-bg="lagune"] {
+  --vig: .16;
+  background: radial-gradient(130vmax 95vmax at 16% 10%, #eaf2d8, #6f9789 36%, #3e6568 58%, #2e4063 85%);
+}
+body[data-bg="tapisserie"] {
+  --vig: .10;
+  background: #e6ded1 url('bg/tapisserie.svg');
+  background-size: 420px 470px;
+}
+body[data-bg="lettres"] {
+  --vig: .26;
+  background: #22365c url('bg/lettres.svg');
+  background-size: 560px 560px;
+}
+body[data-bg="steampunk"] {
+  --vig: .09;
+  background: #e9e1d3 url('bg/steampunk.svg');
+  background-size: 420px 460px;
 }
 
 /* grain d'ambiance très léger, fixe */
@@ -64,7 +91,7 @@ body::after {
 #stage::after {
   content: '';
   position: fixed; inset: 0;
-  background: radial-gradient(120vmax 90vmax at 50% 40%, transparent 55%, rgba(30, 22, 10, .22));
+  background: radial-gradient(120vmax 90vmax at 50% 40%, transparent 55%, rgba(30, 22, 10, var(--vig, .22)));
   pointer-events: none;
   z-index: 15;
 }
@@ -107,19 +134,40 @@ body::after {
   z-index: 5;
 }
 
-/* chaque feuille est poinçonnée des initiales, en relief ton sur ton */
-.sheet::before {
-  content: 'AG';
+/* le tampon AG, poinçonné au coin supérieur gauche de chaque feuille ;
+   il voyage avec le papier, et un clic ouvre le volet des feuilles */
+.stamp {
   position: absolute;
-  top: calc(var(--pad-top) * .32);
-  right: calc(var(--pad-right) * .55);
-  font-size: calc(var(--fs) * .78);
-  letter-spacing: .1em;
-  color: rgba(80, 65, 40, .085);
-  text-shadow: 0 1px 0 rgba(255, 255, 255, .45);
-  transform: rotate(-6deg);
-  pointer-events: none;
+  top: calc(var(--pad-top) * .22);
+  left: calc(var(--pad-left) * .24);
+  width: calc(var(--fs) * 2.9);
+  height: calc(var(--fs) * 2.9);
+  border-radius: 50%;
+  border: 1px solid rgba(140, 59, 46, .20);
+  color: rgba(140, 59, 46, .27);
+  background: transparent;
+  font-family: inherit;
+  font-size: calc(var(--fs) * .9);
+  letter-spacing: .08em;
+  text-indent: .08em;
+  transform: rotate(-8deg);
+  mix-blend-mode: multiply;
+  cursor: pointer;
+  z-index: 7;
+  transition: color .2s, border-color .2s, transform .2s;
 }
+.stamp::before {
+  content: '';
+  position: absolute; inset: 7%;
+  border: 1px solid rgba(140, 59, 46, .13);
+  border-radius: 50%;
+}
+.stamp:hover {
+  color: rgba(140, 59, 46, .62);
+  border-color: rgba(140, 59, 46, .48);
+  transform: rotate(-5deg);
+}
+.stamp:focus-visible { outline: 1px dotted rgba(140, 59, 46, .8); outline-offset: 4px; }
 
 .sheet-text {
   font-family: 'Special Elite', 'Courier New', Courier, monospace;
@@ -204,40 +252,6 @@ body::after {
   clip-path: polygon(50% 0, 100% 100%, 0 100%);
   transition: transform 90ms ease-out;
 }
-
-/* ——— le tampon ——— */
-
-#stamp {
-  position: fixed;
-  z-index: 40;
-  top: 22px;
-  left: max(14px, calc(50% - var(--sheet-w) / 2 + 20px));
-  width: 58px; height: 58px;
-  border-radius: 50%;
-  border: 1px solid rgba(154, 92, 74, .34);
-  color: rgba(154, 92, 74, .42);
-  background: transparent;
-  font-family: inherit;
-  font-size: 18px;
-  letter-spacing: .08em;
-  text-indent: .08em;
-  transform: rotate(-8deg);
-  cursor: pointer;
-  transition: color .2s, border-color .2s, transform .2s, left .26s cubic-bezier(.3, .8, .3, 1);
-}
-#stamp::before {
-  content: '';
-  position: absolute; inset: 4px;
-  border: 1px solid rgba(154, 92, 74, .22);
-  border-radius: 50%;
-}
-#stamp:hover, #stamp.active {
-  color: rgba(154, 92, 74, .78);
-  border-color: rgba(154, 92, 74, .62);
-  transform: rotate(-5deg);
-}
-#stamp.active { left: 22px; }
-#stamp:focus-visible { outline: 1px dotted rgba(140, 59, 46, .8); outline-offset: 4px; }
 
 /* ——— volet des feuilles ——— */
 
@@ -366,6 +380,29 @@ body::after {
   flex-direction: column;
   gap: 9px;
 }
+
+/* le nuancier des fonds */
+#bgs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0 4px;
+}
+#bgs .lbl { font-size: 12.5px; color: var(--ink-soft); margin-right: 2px; }
+.bg-dot {
+  width: 19px; height: 19px;
+  border-radius: 50%;
+  border: 1px solid rgba(60, 45, 20, .3) !important;
+  padding: 0 !important;
+  flex: none;
+}
+.bg-dot[data-on] { box-shadow: 0 0 0 2px var(--panel-bg), 0 0 0 3.5px rgba(140, 59, 46, .55); }
+.bg-dot.d-bureau { background: radial-gradient(circle at 40% 30%, #a89d87, #857a66) !important; }
+.bg-dot.d-aube { background: linear-gradient(165deg, #f3e2d3, #e3c4b2 48%, #c3a4a6) !important; }
+.bg-dot.d-lagune { background: radial-gradient(circle at 30% 25%, #eaf2d8, #5d8a80 45%, #2e4063) !important; }
+.bg-dot.d-tapisserie { background: #e6ded1 url('bg/tapisserie.svg') -40px -53px / 220px auto !important; }
+.bg-dot.d-lettres { background: #22365c url('bg/lettres.svg') 0 0 / 100px auto !important; }
+.bg-dot.d-steampunk { background: #e9e1d3 url('bg/steampunk.svg') -32px -32px / 320px auto !important; }
 .opt {
   font-size: 12.5px;
   color: var(--ink-soft) !important;
@@ -379,7 +416,7 @@ body::after {
 @media print {
   @page { size: A4; margin: 25mm 20mm 25mm 26mm; }
   html, body { height: auto; overflow: visible; background: #fff; }
-  body::after, #stage, #meas, #ta, #rail, #stamp, #scrim, #panel { display: none !important; }
+  body::after, #stage, #meas, #ta, #rail, #scrim, #panel { display: none !important; }
   #print-root {
     display: block;
     font-size: 6.165mm;   /* 20 px à l'échelle 210 mm = 680 px */

@@ -4,7 +4,7 @@
 const $ = s => document.querySelector(s);
 const stage = $('#stage'), mover = $('#mover'), doc = $('#doc'), meas = $('#meas');
 const ta = $('#ta'), caretEl = $('#caret');
-const railMark = $('#rail-marker'), stamp = $('#stamp');
+const railMark = $('#rail-marker');
 const panel = $('#panel'), scrim = $('#scrim'), list = $('#sheet-list');
 const printRoot = $('#print-root');
 
@@ -34,11 +34,12 @@ function loadStore() {
     const s = JSON.parse(localStorage.getItem(LS_KEY));
     if (s && Array.isArray(s.projects) && s.projects.length) {
       s.sounds = Object.assign({ keys: true, carriage: true }, s.sounds);
+      s.bg = s.bg || 'bureau';
       return s;
     }
   } catch (e) { /* réinitialise */ }
   const p = newProject();
-  return { projects: [p], currentId: p.id, sounds: { keys: true, carriage: true } };
+  return { projects: [p], currentId: p.id, sounds: { keys: true, carriage: true }, bg: 'bureau' };
 }
 
 const store = loadStore();
@@ -123,6 +124,15 @@ function syncPages(text) {
     textEl.className = 'ptext sheet-text';
     textEl.dataset.page = pages.length;
     el.appendChild(textEl);
+    // chaque feuille porte son tampon, poinçonné au coin supérieur gauche
+    const st = document.createElement('button');
+    st.type = 'button';
+    st.className = 'stamp';
+    st.textContent = 'AG';
+    st.title = 'Feuilles';
+    st.setAttribute('aria-label', 'Ouvrir les feuilles');
+    st.addEventListener('click', togglePanel);
+    el.appendChild(st);
     doc.appendChild(el);
     pages.push({ start: 0, end: 0, el, textEl });
   }
@@ -445,6 +455,7 @@ let clickCount = 0, lastClickAt = 0, lastClickX = 0, lastClickY = 0;
 
 doc.addEventListener('pointerdown', (e) => {
   if (e.button !== 0) return;
+  if (e.target.closest && e.target.closest('.stamp')) return; // le tampon garde son clic
   e.preventDefault();
   const now = performance.now();
   if (now - lastClickAt < 450 && Math.abs(e.clientX - lastClickX) < 6 &&
@@ -601,21 +612,20 @@ function openPanel() {
   panel.classList.add('open');
   panel.setAttribute('aria-hidden', 'false');
   scrim.classList.add('on');
-  stamp.classList.add('active');
 }
 function closePanel() {
   panel.classList.remove('open');
   panel.setAttribute('aria-hidden', 'true');
   scrim.classList.remove('on');
-  stamp.classList.remove('active');
   ta.focus({ preventScroll: true });
 }
-stamp.addEventListener('click', () => {
+function togglePanel() {
   panel.classList.contains('open') ? closePanel() : openPanel();
-});
+}
 scrim.addEventListener('click', closePanel);
+/* Échap ouvre et ferme le volet — utile quand aucun coin de feuille n'est à l'écran */
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && panel.classList.contains('open')) closePanel();
+  if (e.key === 'Escape') togglePanel();
 });
 
 $('#new-sheet').addEventListener('click', () => {
@@ -631,7 +641,25 @@ const tglKeys = $('#tgl-keys'), tglCarriage = $('#tgl-carriage');
 function refreshOpts() {
   tglKeys.textContent = 'frappe sonore — ' + (store.sounds.keys ? 'oui' : 'non');
   tglCarriage.textContent = 'chariot & sonnette — ' + (store.sounds.carriage ? 'oui' : 'non');
+  document.querySelectorAll('.bg-dot').forEach(d => {
+    if (d.dataset.bg === store.bg) d.setAttribute('data-on', '');
+    else d.removeAttribute('data-on');
+  });
 }
+
+/* le fond, au choix */
+function applyBg() {
+  if (store.bg && store.bg !== 'bureau') document.body.dataset.bg = store.bg;
+  else delete document.body.dataset.bg;
+}
+document.querySelectorAll('.bg-dot').forEach(d => {
+  d.addEventListener('click', () => {
+    store.bg = d.dataset.bg;
+    applyBg();
+    refreshOpts();
+    persist();
+  });
+});
 tglKeys.addEventListener('click', () => {
   store.sounds.keys = !store.sounds.keys;
   if (store.sounds.keys) { S.warm(); S.key(); }
@@ -679,6 +707,7 @@ window.addEventListener('pointerdown', () => S.warm(), { once: true });
 window.addEventListener('keydown', () => S.warm(), { once: true });
 
 measureGeometry();
+applyBg();
 loadProject(cur);
 ta.focus({ preventScroll: true });
 
