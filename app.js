@@ -35,11 +35,12 @@ function loadStore() {
     if (s && Array.isArray(s.projects) && s.projects.length) {
       s.sounds = Object.assign({ keys: true, carriage: true }, s.sounds);
       s.bg = s.bg || 'bureau';
+      s.strict = !!s.strict;
       return s;
     }
   } catch (e) { /* réinitialise */ }
   const p = newProject();
-  return { projects: [p], currentId: p.id, sounds: { keys: true, carriage: true }, bg: 'bureau' };
+  return { projects: [p], currentId: p.id, sounds: { keys: true, carriage: true }, bg: 'bureau', strict: false };
 }
 
 const store = loadStore();
@@ -52,6 +53,8 @@ let belled = false;
 let justTyped = false;
 let saveTimer = null;
 let caretViewport = null;  // dernier rect du caret (coordonnées écran)
+let caretDistRight = 999;  // distance du chariot à la marge droite
+let prevText = '';         // pour suivre les surfrappes quand le texte bouge
 
 function persist() { try { localStorage.setItem(LS_KEY, JSON.stringify(store)); } catch (e) {} }
 function flush() { cur.text = ta.value; cur.updatedAt = Date.now(); persist(); }
@@ -174,7 +177,72 @@ function render() {
     }
     pg.textEl.replaceChildren(frag);
   }
+  drawStrikes(text);
   positionCaret();
+}
+
+/* les surfrappes : des lettres frappées sur d'autres, l'encre reste */
+
+function hash(n) { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n ^= n >>> 4; n = Math.imul(n, 0x27d4eb2d); return ((n ^= n >>> 15) >>> 0) / 4294967295; }
+
+function drawStrikes(text) {
+  const st = cur.strikes;
+  if (!st) return;
+  for (const k of Object.keys(st)) {
+    const i = +k;
+    if (i >= text.length || text[i] === '\n') { delete st[k]; continue; }
+    const pg = pages.find(p => i >= p.start && i < p.end);
+    if (!pg) continue;
+    let off = i - pg.start, node = null;
+    const walker = document.createTreeWalker(pg.textEl, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = walker.nextNode())) {
+      if (off < n.nodeValue.length) { node = n; break; }
+      off -= n.nodeValue.length;
+    }
+    if (!node) continue;
+    const range = document.createRange();
+    range.setStart(node, off); range.setEnd(node, off + 1);
+    const r = range.getClientRects()[0];
+    if (!r) continue;
+    const tr = pg.textEl.getBoundingClientRect();
+    const wrap = document.createElement('span');
+    wrap.className = 'strike sheet-text';
+    wrap.style.left = (r.left - tr.left) + 'px';
+    wrap.style.top = (r.top - tr.top) + 'px';
+    const chars = st[k];
+    for (let c = 0; c < chars.length; c++) {
+      const g = document.createElement('span');
+      g.textContent = chars[c];
+      const h1 = hash(i * 31 + chars.charCodeAt(c) + c * 7);
+      const h2 = hash(i * 17 + chars.charCodeAt(c) * 3 + c);
+      g.style.transform = 'translate(' + ((h1 - .5) * 1.8).toFixed(2) + 'px,' +
+        ((h2 - .5) * 1.6).toFixed(2) + 'px) rotate(' + ((h1 + h2 - 1) * 4).toFixed(2) + 'deg)';
+      wrap.appendChild(g);
+    }
+    pg.textEl.appendChild(wrap);
+  }
+}
+
+function remapStrikes(oldText, newText) {
+  const st = cur.strikes;
+  if (!st || oldText === newText) return;
+  const keys = Object.keys(st);
+  if (!keys.length) return;
+  const ol = oldText.length, nl = newText.length;
+  let p = 0;
+  while (p < ol && p < nl && oldText[p] === newText[p]) p++;
+  let sfx = 0;
+  while (sfx < ol - p && sfx < nl - p && oldText[ol - 1 - sfx] === newText[nl - 1 - sfx]) sfx++;
+  const delEnd = ol - sfx, d = (nl - sfx) - delEnd;
+  const ns = {};
+  for (const k of keys) {
+    const i = +k;
+    if (i < p) ns[i] = st[k];
+    else if (i >= delEnd) ns[i + d] = st[k];
+    /* une surfrappe dans la zone réécrite disparaît avec son support */
+  }
+  cur.strikes = ns;
 }
 
 function caretRect() {
@@ -194,13 +262,11 @@ function positionCaret() {
   caretEl.style.height = (r.height * 0.62) + 'px';
   railMark.style.transform = 'translateX(' + (r.left - 4.5) + 'px)';
 
+  const pg = pages.find(p => p.textEl.contains(focusSpan));
+  caretDistRight = pg ? pg.textEl.getBoundingClientRect().right - r.left : 999;
   if (justTyped && store.sounds.carriage) {
-    const pg = pages.find(p => p.textEl.contains(focusSpan));
-    if (pg) {
-      const distRight = pg.textEl.getBoundingClientRect().right - r.left;
-      if (distRight < 85 * K) { if (!belled) { belled = true; S.bell(); } }
-      else if (distRight > 170 * K) belled = false;
-    }
+    if (caretDistRight < 85 * K) { if (!belled) { belled = true; S.bell(); } }
+    else if (caretDistRight > 170 * K) belled = false;
   }
   justTyped = false;
 }
@@ -305,6 +371,7 @@ const S = (() => {
     keyup: () => play('keyup', j(.92, 1.1), j(.8, 1.2)),
     space: () => play('stroke', j(.8, .88), j(.7, .9)),
     back: () => play('stroke', j(1.02, 1.12), j(.6, .8)),
+    jam: () => play('stroke', j(.58, .66), j(.8, 1)),
     cr: () => play('cr', j(.97, 1.03), 1),
     bell: () => play('bell', 1, 1),
   };
@@ -314,9 +381,121 @@ const S = (() => {
 
 ta.addEventListener('input', () => {
   justTyped = true;
+  remapStrikes(prevText, ta.value);
+  prevText = ta.value;
   render();
   anchor(true);
   scheduleSave();
+});
+
+/* ——— mode machine : marge butée, pas d'effacement, surfrappe ——— */
+
+const mctx = document.createElement('canvas').getContext('2d');
+function charW(ch) {
+  mctx.font = (20 * K) + "px 'Special Elite', 'Courier New', monospace";
+  return mctx.measureText(ch).width || 10 * K;
+}
+function marginLocked(ch) { return caretDistRight < charW(ch) * 0.92; }
+
+function jamFeedback() {
+  if (store.sounds.keys) S.jam();
+  doc.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(1.5px)' }, { transform: 'translateX(0)' }],
+    { duration: 70 });
+}
+
+function addStrike(i, ch) {
+  cur.strikes = cur.strikes || {};
+  cur.strikes[i] = (cur.strikes[i] || '') + ch;
+}
+
+function strictType(ch) {
+  const text = ta.value;
+  if (ta.selectionStart !== ta.selectionEnd) ta.setSelectionRange(ta.selectionStart, ta.selectionStart);
+  const i = ta.selectionStart;
+  const over = i < text.length && text[i] !== '\n';
+  if (!over && marginLocked(ch)) {
+    // chariot en butée : la lettre se frappe sur la précédente, en pâté
+    if (i > 0 && text[i - 1] !== '\n' && ch !== ' ') {
+      addStrike(i - 1, ch);
+      render(); scheduleSave();
+    }
+    jamFeedback();
+    return;
+  }
+  if (over) {
+    if (ch === ' ') {
+      // l'espace n'imprime rien : le chariot avance
+      ta.setSelectionRange(i + 1, i + 1);
+      if (store.sounds.keys) S.space();
+      justTyped = true; render(); anchor(true);
+    } else if (text[i] === ' ') {
+      // frapper sur un blanc : la lettre s'y imprime
+      ta.setSelectionRange(i, i + 1);
+      document.execCommand('insertText', false, ch);
+      if (store.sounds.keys) S.key();
+    } else {
+      // frapper sur une lettre : les deux encres se superposent
+      addStrike(i, ch);
+      ta.setSelectionRange(i + 1, i + 1);
+      if (store.sounds.keys) S.key();
+      justTyped = true; render(); anchor(true); scheduleSave();
+    }
+  } else {
+    document.execCommand('insertText', false, ch);
+    if (store.sounds.keys) (ch === ' ' ? S.space() : S.key());
+  }
+}
+
+function strictCR() {
+  const text = ta.value, i = ta.selectionStart;
+  const j = text.indexOf('\n', i);
+  if (j === -1) {
+    const n = text.length;
+    ta.setSelectionRange(n, n);
+    document.execCommand('insertText', false, '\n');
+  } else {
+    ta.setSelectionRange(j + 1, j + 1);
+    render(); anchor(true);
+  }
+}
+
+ta.addEventListener('beforeinput', (e) => {
+  if (!store.strict) return;
+  const t = e.inputType || '';
+  if (t === 'historicUndo' || t === 'historicRedo' ||
+      t.indexOf('Composition') !== -1) return; // l'annulation et l'accentuation passent
+  if (t === 'insertText') {
+    e.preventDefault();
+    for (const ch of (e.data || '')) strictType(ch);
+  } else if (t === 'insertLineBreak' || t === 'insertParagraph') {
+    e.preventDefault();
+    strictCR();
+  } else if (t === 'deleteContentBackward' || t === 'deleteWordBackward' || t === 'deleteSoftLineBackward') {
+    // le retour arrière recule le chariot, il n'efface rien
+    e.preventDefault();
+    const s0 = ta.selectionStart, e0 = ta.selectionEnd;
+    if (s0 !== e0) ta.setSelectionRange(s0, s0);
+    else if (s0 > 0 && ta.value[s0 - 1] !== '\n') ta.setSelectionRange(s0 - 1, s0 - 1);
+  } else {
+    // coller, couper, supprimer : la machine ne sait pas faire
+    e.preventDefault();
+    jamFeedback();
+  }
+});
+
+/* en composition (accents morts), l'insertion native est reprise en surfrappe */
+let compos = false;
+ta.addEventListener('compositionstart', () => { compos = true; });
+ta.addEventListener('compositionend', (e) => {
+  compos = false;
+  if (!store.strict) return;
+  const data = e.data || '';
+  if (!data) return;
+  const end = ta.selectionEnd, start = end - data.length;
+  if (start < 0 || ta.value.slice(start, end) !== data) return;
+  ta.setSelectionRange(start, end);
+  document.execCommand('delete');
+  for (const ch of data) strictType(ch);
 });
 
 /* l'ancrage ne suit que le clavier : au clic on repositionne le chariot
@@ -333,8 +512,11 @@ ta.addEventListener('keydown', (e) => {
   lastKeyAt = performance.now();
   if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
-    document.execCommand('insertText', false, '    ');
-    if (store.sounds.keys) S.key();
+    if (store.strict) { for (let k = 0; k < 4; k++) strictType(' '); }
+    else {
+      document.execCommand('insertText', false, '    ');
+      if (store.sounds.keys) S.key();
+    }
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
@@ -352,6 +534,7 @@ ta.addEventListener('keydown', (e) => {
   }
   if (!store.sounds.keys || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === 'Backspace' || e.key === 'Delete') S.back();
+  else if (store.strict) { keyDowned = e.key.length === 1; } // strictType sonne lui-même
   else if (e.key === ' ') S.space();
   else if (e.key.length === 1) { S.key(); keyDowned = true; }
 });
@@ -540,8 +723,10 @@ function meta(p) {
 
 function loadProject(p) {
   cur = p;
+  cur.strikes = cur.strikes || {};
   store.currentId = p.id;
   ta.value = p.text;
+  prevText = p.text;
   const n = p.text.length;
   ta.setSelectionRange(n, n);
   lastPaginatedText = null;
@@ -637,10 +822,11 @@ $('#new-sheet').addEventListener('click', () => {
 });
 
 /* options */
-const tglKeys = $('#tgl-keys'), tglCarriage = $('#tgl-carriage');
+const tglKeys = $('#tgl-keys'), tglCarriage = $('#tgl-carriage'), tglStrict = $('#tgl-strict');
 function refreshOpts() {
   tglKeys.textContent = 'frappe sonore — ' + (store.sounds.keys ? 'oui' : 'non');
   tglCarriage.textContent = 'chariot & sonnette — ' + (store.sounds.carriage ? 'oui' : 'non');
+  tglStrict.textContent = 'mode machine — ' + (store.strict ? 'oui' : 'non');
   document.querySelectorAll('.bg-dot').forEach(d => {
     if (d.dataset.bg === store.bg) d.setAttribute('data-on', '');
     else d.removeAttribute('data-on');
@@ -659,6 +845,10 @@ document.querySelectorAll('.bg-dot').forEach(d => {
     refreshOpts();
     persist();
   });
+});
+tglStrict.addEventListener('click', () => {
+  store.strict = !store.strict;
+  refreshOpts(); persist();
 });
 tglKeys.addEventListener('click', () => {
   store.sounds.keys = !store.sounds.keys;

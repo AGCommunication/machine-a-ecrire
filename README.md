@@ -35,6 +35,17 @@ juste l'écriture.
 - **Exporter en PDF.** « Imprimer / PDF » dans le volet (ou `Ctrl`/`Cmd`+`P`)
   compose le texte sur de vraies pages A4, avec la même police et les mêmes
   marges — le dialogue d'impression du navigateur enregistre en PDF.
+- **Le mode machine.** En option, dans le volet : l'éditeur retrouve les
+  manières d'une vraie machine. Plus de retour à la ligne automatique — la
+  sonnette avertit, puis le chariot bute contre la marge et les lettres
+  s'écrasent les unes sur les autres, en pâté. Le retour chariot est à vous
+  (`Entrée`). Rien ne s'efface : le retour arrière recule le chariot sans
+  toucher au papier, et l'on corrige en surfrappant — la nouvelle lettre
+  s'imprime sur l'ancienne, les deux encres restent. L'espace n'imprime
+  rien, il avance. Coller et couper sont inconnus de la machine. Les
+  surfrappes restent sur la feuille même de retour en mode normal : ce sont
+  les cicatrices du premier jet. L'export `.txt` et le PDF donnent, eux, la
+  copie au propre.
 
 ## Utilisation
 

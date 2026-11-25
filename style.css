@@ -193,6 +193,21 @@ body::after {
 }
 .ptext .sel { background: rgba(140, 108, 55, .30); }
 
+/* surfrappes du mode machine : l'encre se superpose */
+.strike {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+  color: #20180d;
+  width: 0;
+  white-space: pre;
+}
+.strike span {
+  position: absolute;
+  left: 0; top: 0;
+  text-shadow: 0 0 1px rgba(32, 24, 13, .85);
+}
+
 /* mesureur hors écran, mêmes métriques que .ptext */
 #meas {
   position: absolute;
